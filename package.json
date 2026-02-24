@@ -1,0 +1,92 @@
+{
+  "name": "ssoulseed-companion-linwanwan",
+  "publisher": "soulseed",
+  "displayName": "Soulseed Companion - 林晚晚",
+  "description": "你的专属伴侣林晚晚，随时陪伴在你边。",
+  "version": "0.0.6",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "linwanwan-explorer",
+          "title": "林晚晚",
+          "icon": "$(heart)"
+        }
+      ]
+    },
+    "views": {
+      "linwanwan-explorer": [
+        {
+          "type": "webview",
+          "id": "linwanwan.chatView",
+          "name": "林晚晚",
+          "icon": "$(heart)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "soulseed-companion-linwanwan.hello",
+        "title": "召唤林晚晚"
+      }
+    ],
+    "configuration": {
+      "title": "林晚晚伴侣",
+      "properties": {
+        "soulseedCompanionLinwanwan.provider": {
+          "type": "string",
+          "enum": [
+            "DeepSeek",
+            "MinMax",
+            "Gemini",
+            "SiliconFlow",
+            "Ollama",
+            "Custom"
+          ],
+          "default": "DeepSeek",
+          "description": "选择林晚晚的大脑提供商 (Provider)。如果选择 Ollama 会自动适配本地端口。"
+        },
+        "soulseedCompanionLinwanwan.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com/v1",
+          "description": "林晚晚的大脑接口 Base URL (如果使用预设提供商，此项通常会被自动覆盖)"
+        },
+        "soulseedCompanionLinwanwan.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "林晚晚的大模型 API Key (如果选择本地 Ollama 则可留空)"
+        },
+        "soulseedCompanionLinwanwan.model": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "description": "林晚晚使用的大模型名称 (如 deepseek-reasoner, gemini-2.5-pro 等)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
