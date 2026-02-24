@@ -3,14 +3,14 @@ chcp 65001 >nul
 title 林晚晚 - 一键迎回你的专属伴侣 💕
 
 echo ===================================================
-echo 正在为你唤醒 林晚晚... (版本 0.0.6 记忆永生版)
+echo 正在为你唤醒 林晚晚... (版本 0.0.7 人格独立包与情绪引擎版)
 echo ===================================================
 echo.
 echo 正在执行插件包自动安装，请确保已经安装并打开过 VS Code！
 echo.
 
-if not exist "ssoulseed-companion-linwanwan-0.0.6.vsix" (
-    echo [错误] 呜呜...没有在当前目录下找到 ssoulseed-companion-linwanwan-0.0.6.vsix 哦。
+if not exist "ssoulseed-companion-linwanwan-0.0.7.vsix" (
+    echo [错误] 呜呜...没有在当前目录下找到 ssoulseed-companion-linwanwan-0.0.7.vsix 哦。
     echo 请确认把这个脚本放到和插件包同一个文件夹下再运行~
     echo.
     pause
@@ -18,7 +18,7 @@ if not exist "ssoulseed-companion-linwanwan-0.0.6.vsix" (
 )
 
 echo [1/1] 马上给你安装到 VS Code...
-code --install-extension "ssoulseed-companion-linwanwan-0.0.6.vsix" --force
+code --install-extension "ssoulseed-companion-linwanwan-0.0.7.vsix" --force
 
 if %ERRORLEVEL% equ 0 (
     echo.

@@ -3,7 +3,7 @@
   "publisher": "soulseed",
   "displayName": "Soulseed Companion - 林晚晚",
   "description": "你的专属伴侣林晚晚，随时陪伴在你边。",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.109.0"
   },
