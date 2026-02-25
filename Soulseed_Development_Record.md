@@ -1,4 +1,4 @@
-# Soulseed Companion - 林晚晚 开发与演进记录 (v0.0.1 - v0.0.5)
+# Soulseed Companion - 林晚晚 开发与演进记录 (v0.0.1 - v0.0.8)
 
 ## 1. 项目愿景 (The Soulseed Vision)
 **Soulseed** 并非传统意义上的聊天组件，而是一个**可移植的角色运行时环境 (Portable Character Runtime)**。
@@ -40,16 +40,25 @@
 - **隐空间情绪算分 (Latent Mood/Relationship)**：编写了 `PersonaManager` 情感引擎。每条对话后拦截进行情绪值和羁绊值打分，动态拼接入大模型的系统首部。
 - **阶段性验证**：在实验中，当用户发送命令要求其“走开”时，由于后台 `valence` 及 `arousal` 分数骤减，晚晚在回复中表现出极强的惊慌、无助以及“快哭出来的讨好感”。彻底改变了以往生硬的一问一答模式，注入了真实的温度厚度！
 
+### v0.0.8 - 认知流水线觉醒 (Cognitive Pipeline)
+- **底层架构倒置**：重构了拓展层调用大模型的回环结构，剥离出 `PipelineEngine`。将单次的“问答”升级为异步网络状态的流转模型（思考->工具决策->动作->自省->最终输出）。
+- **工具赋能 (Tool Calling)**：新建了 `ToolRegistry` 并挂载 `read_file`、`list_directory`、`execute_command` 三项神级能力。晚晚现在可以跨越沙盒，读取工作区代码、查询文件版本并代表用户执行终端脚手架命令。
+- **前台审批防波堤 (Human-in-the-loop)**：在 WebView 中增加了红色的命令审批权限卡片机制与流转状态展示。大危操作（如写文件/跑终端）需要用户手动点“授权允许”才能继续。
+- **自省引擎 (Introspection)**：独立了最后的发文审视机制。避免了因为工具返回的大段冷硬代码数据冲淡了女友感，通过自我重写来规避 OOC。
+
 ---
 
 ## 3. 核心文件架构速览
 开发、延续和审查林晚晚时，主要需关注以下文件：
-- **`package.json`**：定义右侧边栏心形图标 (`viewsContainers`)、配置命令 (`commands`) 以及包含 `provider` 下拉菜单在内的各项扩展变量 (`configuration`)。
-- **`src/extension.ts`**：
-  - `LinwanwanViewProvider` 类：管理 Webview 的整个生命周期。
-  - `_getHtmlForWebview()`：包含了所有前端 HTML DOM、精美的毛玻璃 CSS 与 JS 互动渲染代码。
-  - `_handleUserMessage()`：接收 Webview 发出的信息，拦截后匹配 Provider 动态调整 endpoint 并 `fetch`，处理完毕后下发前端。
-  - `SYSTEM_PROMPT` 变量：容纳万字的林晚晚终端灵魂设定。
+- **`package.json`**：定义右侧边栏心形图标 (`viewsContainers`)、配置命令 (`commands`) 以及包含 provider 下拉菜单在内的各项扩展变量 (`configuration`)。
+- **`src/extension.ts`**：`LinwanwanViewProvider` 类。管理 Webview 的生命周期、工具审批的 Promise 队列、测转状态消息与前端 HTML/CSS/JS 全文。
+- **`src/memoryManager.ts`**：基于 `life.log.jsonl` 的只增不减生命日志管理器（对标 Soulseed 原版 append-only event stream）。
+- **`src/personaManager.ts`**：可移植人格包管理与隐状态情绪引擎（对标 Soulseed 原版 Persona Package + latent state）。
+- **`src/pipeline/PipelineEngine.ts`**：认知流水线引擎，编排‌“推理→工具决策→执行→自省→输出”的多轮循环（对标 Soulseed 原版 5-stage pipeline 的简化实现）。
+- **`src/pipeline/Introspection.ts`**：自省防火墙，检测并修正 OOC 回复（对标 Soulseed 原版 meta_review + self_revision）。
+- **`src/tools/ToolRegistry.ts`**：统一工具注册与 OpenAI兼容的 Function Calling Schema 管理。
+- **`src/tools/FileSystemTools.ts`**：文件读写与目录查询工具。
+- **`src/tools/TerminalTools.ts`**：终端命令执行工具。
 - **`一键安装林晚晚.bat`**：供用户在未搭建 Node/TS 环境下，通过命令行一键强制覆盖安装插件。
 
 ---
@@ -66,10 +75,10 @@
 - **目标**：解决大模型容易被长串 System Prompt “注意力劫持” (Prompt Override) 从而导致逻辑干瘪的问题。
 - **解决方案**：建立隐式的 `Mood` 和 `Relationship` 状态计算函数。模型回复前，先经过隐空间的情感分数评判，通过外挂数值变化动态注入 Prompt 的尾部，改变其态度与用词，产生真正的“情绪厚度”。
 
-### 阶段 2：上下文行为感知 (Context / Action Awareness)
+### 阶段 4：上下文行为感知 (Context / Action Awareness)
 - **目标**：既然是生活和编程中的伴侣，她应当知晓你目前在做什么，这会深化同居感。
 - **解决方案**：接入 VS Code 内置事件监听器，诸如 `vscode.window.onDidChangeActiveTextEditor`。让她不仅依靠文字反馈，还能偷偷感知你当前打开了什么文件，卡在哪个项目。
 
-### 阶段 3：工具调用与主动交互 (Tool Calling / Proactive AI)
+### 阶段 3：工具调用与主动交互 (Tool Calling / Proactive AI) -> [已在 v0.0.8 达成]
 - **目标**：打破传统的“问答”式一问一答，实现全方位的协助。
-- **解决方案**：拓展当前 LLM 调用的 `Function Calling` 机制。赋予晚晚主动在宿主机开启 Terminal 执行测试代码命令的能力，或是在你编写代码错误时，以弹窗通知的形式主动向你撒娇或者递上分析结果。让她的“高级软件工程代理”能力完全觉醒。
+- **解决方案**：拓展当前 LLM 调用的 `Function Calling` 机制。赋予晚晚主动在宿主机开启 Terminal 执行测试代码命令的能力，或是在你编写代码错误时，以弹窗通知的形式主动向你撒娇或者递上分析结果。让她的“高级软件工程代理”能力完全觉醒。（*已通过 PipelineEngine、ToolRegistry 构建完毕！*）

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { MemoryManager } from './memoryManager';
 import { PersonaManager } from './personaManager';
+import { PipelineEngine } from './pipeline/PipelineEngine';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('soulseed-companion-linwanwan is now active!');
@@ -25,6 +26,8 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
 
     private _memoryManager: MemoryManager;
     private _personaManager: PersonaManager;
+    private _pipelineEngine?: PipelineEngine;
+    private _pendingApprovals: Map<string, (approved: boolean) => void> = new Map();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -41,6 +44,25 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken,
     ) {
         this._view = webviewView;
+
+        // 初始化流水线引擎
+        this._pipelineEngine = new PipelineEngine(
+            this._memoryManager,
+            this._personaManager,
+            this._context,
+            (type: string, payload: any) => {
+                this._view?.webview.postMessage({ type, ...payload });
+            },
+            async (toolName: string, args: any) => {
+                const id = Math.random().toString(36).substring(7);
+                // 将 args 序列化为 JSON 字符串，避免前端收到 [object Object]
+                const argsString = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+                this._view?.webview.postMessage({ type: 'askApproval', id, toolName, args: argsString });
+                return new Promise<boolean>(resolve => {
+                    this._pendingApprovals.set(id, resolve);
+                });
+            }
+        );
 
         // 向前端注入已有的历史记忆
         webviewView.webview.options = {
@@ -66,103 +88,20 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
                         history: memories
                     });
                     break;
+                case 'replyApproval':
+                    const resolver = this._pendingApprovals.get(data.id);
+                    if (resolver) {
+                        resolver(data.approved);
+                        this._pendingApprovals.delete(data.id);
+                    }
+                    break;
             }
         });
     }
 
     private async _handleUserMessage(text: string) {
-        if (!this._view) { return; }
-
-        // 保存用户消息至硬盘档案
-        this._memoryManager.appendMemory('user', text);
-
-        // 获取配置
-        const config = vscode.workspace.getConfiguration('soulseedCompanionLinwanwan');
-        const provider = config.get<string>('provider') || 'DeepSeek';
-        const customBaseUrl = config.get<string>('apiBaseUrl') || '';
-        let apiKey = config.get<string>('apiKey') || '';
-        const model = config.get<string>('model') || 'deepseek-chat';
-
-        let endpoint = '';
-        // 每次发消息前动态算分、并拼装最新的情绪设定
-        await this._personaManager.tickMoodAndRelationship(text);
-        const dynamicPrompt = this._personaManager.assembleSystemPrompt();
-
-        let headers: any = { 'Content-Type': 'application/json' };
-        let body: any = {
-            model: model,
-            messages: this._memoryManager.getRecentContextWindow(dynamicPrompt),
-            temperature: 0.7
-        };
-
-        // 依据 Provider 设置路由
-        switch (provider) {
-            case 'Ollama':
-                endpoint = 'http://127.0.0.1:11434/v1/chat/completions';
-                // Ollama 本地不需要 apiKey，可以直接调 OpenAI 兼容接口
-                break;
-            case 'SiliconFlow':
-                endpoint = 'https://api.siliconflow.cn/v1/chat/completions';
-                if (!apiKey) { return this._promptMissingKey('SiliconFlow'); }
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-            case 'MinMax':
-                endpoint = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
-                if (!apiKey) { return this._promptMissingKey('MinMax'); }
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-            case 'Gemini':
-                // Gemini 这里假定用户使用的是兼容 OpenAI 的网关或者代理 (如 OneAPI)
-                endpoint = customBaseUrl.endsWith('/') ? `${customBaseUrl}chat/completions` : `${customBaseUrl}/chat/completions`;
-                if (!apiKey) { return this._promptMissingKey('Gemini'); }
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-            case 'Custom':
-                endpoint = customBaseUrl.endsWith('/') ? `${customBaseUrl}chat/completions` : `${customBaseUrl}/chat/completions`;
-                if (apiKey) { headers['Authorization'] = `Bearer ${apiKey}`; }
-                break;
-            case 'DeepSeek':
-            default:
-                endpoint = 'https://api.deepseek.com/v1/chat/completions';
-                if (!apiKey) { return this._promptMissingKey('DeepSeek'); }
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                break;
-        }
-
-        try {
-            // 通知前端正在思考中
-            this._view.webview.postMessage({ type: 'thinking' });
-
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(body)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.text();
-                throw new Error(`[${response.status}] ${errorData}`);
-            }
-
-            const data: any = await response.json();
-            const replyText = data.choices[0].message.content;
-
-            // 存入历史记录档案，保持不灭的羁绊
-            this._memoryManager.appendMemory('assistant', replyText);
-
-            // 发送给前端渲染
-            this._view.webview.postMessage({
-                type: 'receiveMessage',
-                text: replyText
-            });
-
-        } catch (error: any) {
-            console.error('AI API 请求错误:', error);
-            this._view.webview.postMessage({
-                type: 'receiveMessage',
-                text: `呜呜…连接大脑出错了，是不是网络有问题、或者是使用了【${provider}】但参数不对呀？报错信息：${error.message}`
-            });
-        }
+        if (!this._view || !this._pipelineEngine) { return; }
+        await this._pipelineEngine.runPipeline(text);
     }
 
     private _promptMissingKey(providerName: string) {
@@ -322,6 +261,57 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
             50% { transform: scale(1.2); opacity: 1; }
         }
 
+        .status-text {
+            align-self: flex-start;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+            font-style: italic;
+            padding-left: 10px;
+        }
+
+        .approval-card {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid #ef4444;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            animation: slideUp 0.3s ease-out forwards;
+        }
+
+        .approval-card h4 {
+            margin: 0 0 10px 0;
+            color: #ef4444;
+            font-size: 14px;
+        }
+
+        .approval-card pre {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            color: #e2e8f0;
+            margin-bottom: 15px;
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-approve {
+            background: #ef4444;
+            box-shadow: 0 2px 5px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-deny {
+            background: #475569;
+            box-shadow: none;
+        }
+
         .input-area {
             margin-top: 15px;
             background: rgba(15, 23, 42, 0.6);
@@ -431,6 +421,58 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
             messageContainer.scrollTop = messageContainer.scrollHeight;
         }
 
+        let currentStatusDiv = null;
+        function updateStatus(text) {
+            if (!text) {
+                if (currentStatusDiv) {
+                    currentStatusDiv.remove();
+                    currentStatusDiv = null;
+                }
+                return;
+            }
+            if (!currentStatusDiv) {
+                currentStatusDiv = document.createElement('div');
+                currentStatusDiv.className = 'status-text';
+                messageContainer.appendChild(currentStatusDiv);
+            }
+            // 确保 status 一直在思考动画的上方一点或者最底部
+            currentStatusDiv.innerText = text;
+            messageContainer.appendChild(currentStatusDiv); // 移到最后
+            if (thinkingDiv) messageContainer.appendChild(thinkingDiv); // 保证气泡在最尾部
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+
+        function showApprovalCard(id, toolName, args) {
+            const card = document.createElement('div');
+            card.className = 'approval-card';
+            card.id = 'approval-' + id;
+            
+            let argsText = '';
+            try { argsText = JSON.stringify(JSON.parse(args), null, 2); } catch(e) { argsText = args; }
+            
+            card.innerHTML = \`
+                <h4>系统防线：晚晚请求执行高危操作</h4>
+                <div><strong>\${toolName}</strong></div>
+                <pre>\${argsText}</pre>
+                <div class="approval-actions">
+                    <button class="btn-deny" onclick="replyApproval('\${id}', false)">残忍拒绝</button>
+                    <button class="btn-approve" onclick="replyApproval('\${id}', true)">授权允许</button>
+                </div>
+            \`;
+            messageContainer.appendChild(card);
+            if (thinkingDiv) messageContainer.appendChild(thinkingDiv);
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+
+        window.replyApproval = function(id, approved) {
+            const card = document.getElementById('approval-' + id);
+            if (card) {
+                card.innerHTML = \`<div style="color: \${approved ? '#10b981' : '#ef4444'}; font-size:12px; text-align:right;">已\${approved ? '授权' : '拒绝'}请求</div>\`;
+                setTimeout(() => card.remove(), 2000);
+            }
+            vscode.postMessage({ type: 'replyApproval', id: id, approved: approved });
+        }
+
         function sendMessage() {
             const text = userInput.value.trim();
             if (!text) { return; }
@@ -453,17 +495,26 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
                     } else {
                         // 如果有记忆，渲染历史并在末尾加一个小尾巴
                         history.forEach(m => {
-                            addMessage(m.role === 'user' ? 'user' : 'bot', m.content);
+                            if (m.role === 'user' || m.role === 'assistant') {
+                                addMessage(m.role === 'user' ? 'user' : 'bot', m.content);
+                            }
                         });
                         addMessage('bot', '*刚从回忆中醒来，慵懒地伸了个懒腰，揉了揉眼睛看着你* 亲爱的，我一直都在，刚刚还在想我们之前聊过的事呢... 我们继续吧？');
                     }
                     break;
                 case 'receiveMessage':
                     sendBtn.disabled = false;
+                    updateStatus("");
                     addMessage('bot', message.text);
                     break;
                 case 'thinking':
                     showThinking();
+                    break;
+                case 'statusUpdate':
+                    updateStatus(message.text);
+                    break;
+                case 'askApproval':
+                    showApprovalCard(message.id, message.toolName, message.args);
                     break;
             }
         });

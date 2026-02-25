@@ -3,3 +3,16 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# 环境变量与密钥 (防止 API Key 泄露)
+.env
+.env.local
+.env.*
+
+# 原版 Soulseed 参考仓库 (不应上传到自己的 repo)
+Soul-seed-reference/
+
+# 开发工具缓存
+.gemini/
+.vscode-test/
+*.log
