@@ -98,6 +98,49 @@ export class MemoryManager {
     }
 
     /**
+     * 撤回最后一轮对话（user + assistant 消息对）
+     * 对标 Soulseed append-only 原则：不删改历史日志，而是追加 retract 标记事件
+     * 返回被撤回的用户原始文本（用于回填输入框）
+     */
+    public retractLastPair(): { success: boolean, originalText: string } {
+        if (this._memories.length < 2) {
+            return { success: false, originalText: '' };
+        }
+
+        // 从尾部向前查找最后一条 assistant 和 user 消息
+        let assistantIndex = -1;
+        let userIndex = -1;
+
+        for (let i = this._memories.length - 1; i >= 0; i--) {
+            if (assistantIndex === -1 && this._memories[i].role === 'assistant') {
+                assistantIndex = i;
+            } else if (assistantIndex !== -1 && this._memories[i].role === 'user') {
+                userIndex = i;
+                break;
+            }
+        }
+
+        if (userIndex === -1 || assistantIndex === -1) {
+            return { success: false, originalText: '' };
+        }
+
+        const originalText = this._memories[userIndex].content;
+
+        // 从内存中移除这一对消息（从后往前删避免索引偏移）
+        this._memories.splice(assistantIndex, 1);
+        this._memories.splice(userIndex, 1);
+
+        // 向日志追加 retract 事件（保持 append-only，不篡改历史）
+        this._appendToLifeLog({
+            timestamp: new Date().toISOString(),
+            role: 'system',
+            content: `[RETRACT] 用户撤回了上一轮对话 (原文: "${originalText.substring(0, 50)}...")`
+        });
+
+        return { success: true, originalText };
+    }
+
+    /**
      * 临时清空当前生命日志 (用于除错和重置)
      */
     public clearAllMemories() {

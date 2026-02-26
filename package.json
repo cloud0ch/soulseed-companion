@@ -4,6 +4,10 @@
   "displayName": "Soulseed Companion - 林晚晚",
   "description": "你的专属伴侣林晚晚，随时陪伴在身边。",
   "version": "0.0.8",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cloud0ch/soulseed-companion.git"
+  },
   "engines": {
     "vscode": "^1.109.0"
   },

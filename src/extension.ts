@@ -95,6 +95,15 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
                         this._pendingApprovals.delete(data.id);
                     }
                     break;
+                case 'retractMessage':
+                    const result = this._memoryManager.retractLastPair();
+                    if (result.success) {
+                        this._view?.webview.postMessage({
+                            type: 'messageRetracted',
+                            originalText: result.originalText
+                        });
+                    }
+                    break;
             }
         });
     }
@@ -312,6 +321,40 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
             box-shadow: none;
         }
 
+        .message.user {
+            position: relative;
+        }
+
+        .retract-btn {
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.8);
+            color: white;
+            border: none;
+            font-size: 11px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            transition: transform 0.15s;
+        }
+
+        .message.user:hover .retract-btn {
+            display: flex;
+        }
+
+        .retract-btn:hover {
+            transform: scale(1.2);
+            background: #ef4444;
+        }
+
         .input-area {
             margin-top: 15px;
             background: rgba(15, 23, 42, 0.6);
@@ -408,6 +451,20 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
             const messageDiv = document.createElement('div');
             messageDiv.className = \`message \${sender}\`;
             messageDiv.innerHTML = formatMessage(text);
+
+            // 用户消息添加撤回按钮
+            if (sender === 'user') {
+                const retractBtn = document.createElement('button');
+                retractBtn.className = 'retract-btn';
+                retractBtn.title = '撤回';
+                retractBtn.innerText = '↩';
+                retractBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    retractLastMessage();
+                };
+                messageDiv.appendChild(retractBtn);
+            }
+
             messageContainer.appendChild(messageDiv);
             messageContainer.scrollTop = messageContainer.scrollHeight;
         }
@@ -464,6 +521,10 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
             messageContainer.scrollTop = messageContainer.scrollHeight;
         }
 
+        function retractLastMessage() {
+            vscode.postMessage({ type: 'retractMessage' });
+        }
+
         window.replyApproval = function(id, approved) {
             const card = document.getElementById('approval-' + id);
             if (card) {
@@ -515,6 +576,19 @@ class LinwanwanViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'askApproval':
                     showApprovalCard(message.id, message.toolName, message.args);
+                    break;
+                case 'messageRetracted':
+                    // 移除最后的 bot 回复和 user 消息
+                    const allMsgs = messageContainer.querySelectorAll('.message');
+                    let removed = 0;
+                    for (let i = allMsgs.length - 1; i >= 0 && removed < 2; i--) {
+                        allMsgs[i].remove();
+                        removed++;
+                    }
+                    // 回填原文到输入框
+                    userInput.value = message.originalText || '';
+                    userInput.focus();
+                    sendBtn.disabled = false;
                     break;
             }
         });
