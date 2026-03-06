@@ -177,6 +177,6 @@ soulseed-companion/
 
 Soulseed Companion 是它在 VS Code 环境中的轻量化适配实现，旨在将"有记忆、有灵魂、跨时间持续成长"的 AI 伴侣理念带入日常编程工作流。
 
-## License
+## License / 许可证
 
-[CC BY-NC-ND 4.0](LICENSE)
+CC BY-NC-ND 4.0 — see [LICENSE](LICENSE) for details.
